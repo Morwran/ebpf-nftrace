@@ -1,9 +1,9 @@
 .vscode
 bin
 vendor
-deploy/rpm/artifacts
 go.work*
 *.o
 *.skel.json
 package.json
-ebpf_trace_collector
+ecc
+ecli
