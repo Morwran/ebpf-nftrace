@@ -6,12 +6,12 @@ import (
 
 	"github.com/Morwran/ebpf-nftrace/internal/app"
 	. "github.com/Morwran/ebpf-nftrace/internal/app/nftrace" //nolint:revive
-	"golang.org/x/sys/unix"
 
 	"github.com/H-BF/corlib/logger"
 	gs "github.com/H-BF/corlib/pkg/patterns/graceful-shutdown"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/sys/unix"
 )
 
 func main() {
