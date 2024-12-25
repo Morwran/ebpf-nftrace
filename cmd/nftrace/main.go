@@ -19,7 +19,7 @@ func main() {
 	ctx := app.Context()
 	logger.SetLevel(zap.InfoLevel)
 	logger.Info(ctx, "-= HELLO =-")
-	if err := SetupLogger(zap.DebugLevel); err != nil {
+	if err := SetupLogger(LogLevel); err != nil {
 		logger.Fatal(ctx, errors.WithMessage(err, "when setup logger"))
 	}
 
@@ -38,7 +38,7 @@ func main() {
 		defer collector.Close()
 
 		errc <- collector.Run(ctx, func(event TraceInfo) {
-			logger.Infof(ctx,
+			logger.Debugf(ctx,
 				"id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
 					"jt: %s, nfproto: %d, policy: %s, makr: %d, iif: %d, iif_type: %d, iif_name: %s, oif: %d, oif_type: %d, oif_name: %s,\n",
 				event.Id,
