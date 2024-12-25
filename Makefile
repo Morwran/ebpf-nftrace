@@ -81,7 +81,7 @@ LDFLAGS?=-X '$(APP_IDENTITY).Name=$(APP_NAME)'\
 
 .PHONY: .install-bpf2go
 .install-bpf2go:
-	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go@latest
+	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go
 
 
 BPF2GO:=$(GOBIN)/bpf2go
