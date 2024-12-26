@@ -31,8 +31,8 @@ struct
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
-    __uint(max_entries, 1);
-} perf_trace_evt SEC(".maps");
+    __uint(max_entries, 128);
+} events SEC(".maps");
 
 struct
 {
@@ -84,7 +84,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
     fill_trace(&trace, pkt, verdict, rule, info);
 #endif
 
-    bpf_perf_event_output(ctx, &perf_trace_evt, 0, &trace, sizeof(trace));
+    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
 
     return 0;
 }

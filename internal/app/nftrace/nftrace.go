@@ -10,7 +10,6 @@ import (
 
 	"github.com/H-BF/corlib/logger"
 	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/pkg/errors"
 )
@@ -70,8 +69,7 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 	}
 	defer kp.Close()
 
-	rd, err := ringbuf.NewReader(t.objs.Events)
-	//	rd, err = perf.NewReader(objs.PerfTraceEvt, 1)
+	rd, err := newReader(t.objs.Events)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
@@ -93,7 +91,10 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 			if err != nil {
 				return errors.WithMessage(err, "reading trace from reader")
 			}
-
+			if len(record.RawSample) == 0 {
+				log.Debug("Empty RawSample received")
+				continue
+			}
 			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
 				return errors.WithMessage(err, "parsing trace event")
 			}

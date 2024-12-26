@@ -78,13 +78,17 @@ LDFLAGS?=-X '$(APP_IDENTITY).Name=$(APP_NAME)'\
          -X '$(APP_IDENTITY).BuildHash=$(GIT_HASH)'\
          -X '$(APP_IDENTITY).BuildTag=$(GIT_TAG)'\
 
+BPF2GO:=$(GOBIN)/bpf2go
 
 .PHONY: .install-bpf2go
 .install-bpf2go:
-	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go
-
-
-BPF2GO:=$(GOBIN)/bpf2go
+ifneq ($(wildcard $(BPF2GO)),)
+	@echo >/dev/null
+else
+	@echo installing bpf2go && \
+	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go && \
+	echo -=OK=-
+endif
 
 BPFDIR:=$(CURDIR)/internal/app/nftrace
 
@@ -92,6 +96,13 @@ BPFDIR:=$(CURDIR)/internal/app/nftrace
 ebpf: | .install-bpf2go ##build ebpf program.
 	@echo build ebpf program && \
 	$(BPF2GO) -output-dir $(BPFDIR) -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(BPFDIR)/ebpf/nftrace.c -- -I$(BPFDIR)/ebpf/ && \
+	echo -=OK=-
+
+
+.PHONY: ebpf-perf
+ebpf-perf: | .install-bpf2go ##build ebpf program.
+	@echo build ebpf program && \
+	$(BPF2GO) -output-dir $(BPFDIR) -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(BPFDIR)/ebpf/nftrace_perf.c -- -I$(BPFDIR)/ebpf/ && \
 	echo -=OK=-
 
 
@@ -107,7 +118,25 @@ else
 	echo build '$(APP)' for OS/ARCH='$(os)'/'$(arch)' ... && \
 	echo into '$(OUT)' && \
 	env GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 \
-	$(GO) build -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
+	$(GO) build -tags=ringbuf -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
+	echo -=OK=-
+endif
+
+.PHONY: ebpf-trace-collector-perf
+ebpf-trace-collector-perf: | ebpf-perf ##build ebpf-trace-collector. Usage: make ebpf-trace-collector [platform=linux/<amd64|arm64>]
+ebpf-trace-collector-perf: OUT=$(CURDIR)/bin/ebpf-trace-collector-perf
+ebpf-trace-collector-perf:
+ifeq ($(filter amd64 arm64,$(arch)),)
+	$(error arch=$(arch) but must be in [amd64|arm64])
+endif
+ifneq ('$(os)','linux')
+	@$(MAKE) $@ os=linux
+else
+	@$(MAKE) go-deps && \
+	echo build '$(APP)' for OS/ARCH='$(os)'/'$(arch)' ... && \
+	echo into '$(OUT)' && \
+	env GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 \
+	$(GO) build -tags=perf -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
 	echo -=OK=-
 endif
 
