@@ -15,7 +15,7 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 struct
 {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
+    __uint(max_entries, 1 << 30);
 } events SEC(".maps");
 
 struct
@@ -82,7 +82,10 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
 #else
     fill_trace(trace, pkt, verdict, rule, info);
 #endif
-    bpf_ringbuf_submit(trace, 0);
+    if (trace->type == NFT_TRACETYPE_RULE)
+    {
+        bpf_ringbuf_submit(trace, 0);
+    }
 
     return 0;
 }

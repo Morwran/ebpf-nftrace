@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/Morwran/ebpf-nftrace/internal/app"
@@ -25,22 +26,35 @@ func main() {
 
 	gracefulDuration := 5 * time.Second
 	errc := make(chan error, 1)
-
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
 		defer func() {
 			close(errc)
+			wg.Done()
 		}()
-		collector, err := NewCollector(SampleRate)
+		collector, err := NewCollector(SampleRate, RingBuffSize)
 		if err != nil {
 			errc <- err
 			return
 		}
 		defer collector.Close()
 
+		cnt := uint64(0)
+
+		defer func() {
+			logger.Infof(ctx, "counted traces: %d", cnt)
+		}()
+
 		errc <- collector.Run(ctx, func(event TraceInfo) {
+			if TraceType(event.Type).String() != "rule" {
+				return
+			}
+			cnt++
 			logger.Debugf(ctx,
-				"id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
+				"cnt: %d, id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
 					"jt: %s, nfproto: %d, policy: %s, makr: %d, iif: %d, iif_type: %d, iif_name: %s, oif: %d, oif_type: %d, oif_name: %s,\n",
+				cnt,
 				event.Id,
 				TraceType(event.Type),
 				FamilyTable(event.Family),
@@ -80,7 +94,7 @@ func main() {
 		}
 	case jobErr = <-errc:
 	}
-
+	wg.Wait()
 	if jobErr != nil {
 		logger.Fatal(ctx, jobErr)
 	}

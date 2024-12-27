@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/H-BF/corlib/logger"
 	"github.com/cilium/ebpf/link"
@@ -19,24 +21,34 @@ import (
 type (
 	TraceInfo      bpfTraceInfo
 	traceCollector struct {
-		objs       bpfObjects
-		sampleRate uint64
-		onceRun    sync.Once
-		onceClose  sync.Once
-		stop       chan struct{}
-		stopped    chan struct{}
+		objs      bpfObjects
+		bufflen   int
+		onceRun   sync.Once
+		onceClose sync.Once
+		stop      chan struct{}
+		stopped   chan struct{}
 	}
 )
 
-func NewCollector(sampleRate uint64) (*traceCollector, error) {
+func NewCollector(sampleRate uint64, ringBuffSize int) (*traceCollector, error) {
+	if ringBuffSize < 1 {
+		panic(errors.Errorf("Collector/ringBuffSize is %d, but should be > 1", ringBuffSize))
+	}
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, err
 	}
 
 	objs := bpfObjects{}
-	err := loadBpfObjects(&objs, nil)
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		return nil, errors.WithMessage(err, "failed to load bpf objects")
+	}
 
-	return &traceCollector{objs: objs, sampleRate: sampleRate, stop: make(chan struct{})}, err
+	key := uint32(0)
+	if err := objs.SampleRate.Put(key, sampleRate); err != nil {
+		return nil, errors.WithMessage(err, "failed to update sample_rate map")
+	}
+
+	return &traceCollector{objs: objs, bufflen: ringBuffSize, stop: make(chan struct{})}, nil
 }
 
 func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)) error {
@@ -50,18 +62,14 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 		return errors.New("it has been run or closed yet")
 	}
 
-	fn := "nft_trace_notify"
-	key := uint32(0)
-	if err := t.objs.SampleRate.Put(key, t.sampleRate); err != nil {
-		return errors.WithMessage(err, "failed to update sample_rate map")
-	}
+	const fn = "nft_trace_notify"
 
-	var checkValue uint64
-	if err := t.objs.SampleRate.Lookup(key, &checkValue); err != nil {
-		return errors.WithMessage(err, "failed to read from sample_rate map")
-	}
 	log := logger.FromContext(ctx).Named("trace-collector")
-	log.Infof("sample_rate map initialized with value: %d", checkValue)
+
+	defer func() {
+		log.Info("stop")
+		close(t.stopped)
+	}()
 
 	kp, err := link.Kprobe(fn, t.objs.KprobeNftTraceNotify, nil)
 	if err != nil {
@@ -69,40 +77,81 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 	}
 	defer kp.Close()
 
-	rd, err := newReader(t.objs.Events)
+	rd, err := newReader(t.objs.Events, t.bufflen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
 	defer rd.Close()
+	log.Infof("created map with entries=%d and buff size=%d", t.objs.Events.MaxEntries(), rd.BufferSize())
 
 	log.Info("Waiting for events..")
+	errCh := make(chan error)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		var (
+			event           bpfTraceInfo
+			e               error
+			record          = newRecord()
+			lostCnt, rcvCnt uint64
+		)
+		defer func() {
+			log.Infof("lost samples: %d (%.2f%%), expected samples: %d",
+				lostCnt, float64(lostCnt)/float64(rcvCnt+lostCnt)*100, rcvCnt+lostCnt)
+			close(errCh)
+			wg.Done()
+		}()
 
-	var event bpfTraceInfo
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("will exit cause ctx canceled")
-			return ctx.Err()
-		case <-t.stop:
-			log.Info("will exit cause it has closed")
-			return nil
-		default:
-			record, err := rd.Read()
-			if err != nil {
-				return errors.WithMessage(err, "reading trace from reader")
-			}
-			if len(record.RawSample) == 0 {
-				log.Debug("Empty RawSample received")
-				continue
-			}
-			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-				return errors.WithMessage(err, "parsing trace event")
-			}
-			if callback != nil {
-				callback(TraceInfo(event))
+	Loop:
+		for e == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.stop:
+				return
+			default:
+				rd.SetDeadline(time.Now().Add(time.Second))
+				err := rd.ReadInto(record)
+				if err != nil {
+					if errors.Is(err, os.ErrDeadlineExceeded) {
+						continue
+					}
+					e = errors.WithMessage(err, "reading trace from reader")
+					goto Loop
+				}
+				lostCnt += getLostSamples(record)
+				if len(record.RawSample) == 0 {
+					log.Debug("Empty RawSample received")
+					continue
+				}
+				if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+					e = errors.WithMessage(err, "parsing trace event")
+					goto Loop
+				}
+				rcvCnt++
+				if callback != nil {
+					callback(TraceInfo(event))
+				}
 			}
 		}
+		if e != nil {
+			errCh <- e
+		}
+	}()
+	var jobErr error
+	select {
+	case <-ctx.Done():
+		log.Info("will exit cause ctx canceled")
+		jobErr = ctx.Err()
+	case <-t.stop:
+		log.Info("will exit cause it has closed")
+
+	case jobErr = <-errCh:
 	}
+
+	wg.Wait()
+
+	return jobErr
 }
 
 // Close

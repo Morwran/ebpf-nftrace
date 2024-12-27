@@ -87,9 +87,10 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Events     *ebpf.MapSpec `ebpf:"events"`
-	SampleRate *ebpf.MapSpec `ebpf:"sample_rate"`
-	TraceCount *ebpf.MapSpec `ebpf:"trace_count"`
+	Events      *ebpf.MapSpec `ebpf:"events"`
+	SampleRate  *ebpf.MapSpec `ebpf:"sample_rate"`
+	TraceCount  *ebpf.MapSpec `ebpf:"trace_count"`
+	TraceHolder *ebpf.MapSpec `ebpf:"trace_holder"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -111,9 +112,10 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Events     *ebpf.Map `ebpf:"events"`
-	SampleRate *ebpf.Map `ebpf:"sample_rate"`
-	TraceCount *ebpf.Map `ebpf:"trace_count"`
+	Events      *ebpf.Map `ebpf:"events"`
+	SampleRate  *ebpf.Map `ebpf:"sample_rate"`
+	TraceCount  *ebpf.Map `ebpf:"trace_count"`
+	TraceHolder *ebpf.Map `ebpf:"trace_holder"`
 }
 
 func (m *bpfMaps) Close() error {
@@ -121,6 +123,7 @@ func (m *bpfMaps) Close() error {
 		m.Events,
 		m.SampleRate,
 		m.TraceCount,
+		m.TraceHolder,
 	)
 }
 

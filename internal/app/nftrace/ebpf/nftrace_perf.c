@@ -13,7 +13,6 @@
 
 const struct trace_info *unused __attribute__((unused));
 
-struct trace_info trace SEC(".bss");
 struct trace_info trace_ini SEC(".bss");
 
 char __license[] SEC("license") = "Dual MIT/GPL";
@@ -31,7 +30,7 @@ struct
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128);
+    __uint(max_entries, 128); // number of CPUs
 } events SEC(".maps");
 
 struct
@@ -41,6 +40,14 @@ struct
     __type(key, u32);
     __type(value, u64);
 } trace_count SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, u32);
+    __type(value, struct trace_info);
+} trace_holder SEC(".maps");
 
 SEC("kprobe/nft_trace_notify")
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
@@ -52,10 +59,9 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
                struct nft_traceinfo *info)
 #endif
 {
-    u32 sample_rate_key = 0, trace_count_key = 0;
+    u32 sample_rate_key = 0, trace_count_key = 0, trace_holder_key = 0;
     u64 *sample_rate_val, *trace_count_val, initval = 1;
-
-    trace = trace_ini;
+    struct trace_info *trace;
 
     sample_rate_val = bpf_map_lookup_elem(&sample_rate, &sample_rate_key);
 
@@ -78,13 +84,23 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         }
     }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
-    fill_trace(&trace, BPF_CORE_READ(info, pkt), BPF_CORE_READ(info, verdict), BPF_CORE_READ(info, rule), info);
-#else
-    fill_trace(&trace, pkt, verdict, rule, info);
-#endif
+    trace = bpf_map_lookup_elem(&trace_holder, &trace_holder_key);
 
-    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
+    if (!trace)
+    {
+        trace = &trace_ini;
+        bpf_map_update_elem(&trace_holder, &trace_holder_key, trace, BPF_ANY);
+    }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+    fill_trace(trace, BPF_CORE_READ(info, pkt), BPF_CORE_READ(info, verdict), BPF_CORE_READ(info, rule), info);
+#else
+    fill_trace(trace, pkt, verdict, rule, info);
+#endif
+    if (trace->type == NFT_TRACETYPE_RULE)
+    {
+        bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, trace, sizeof(*trace));
+    }
 
     return 0;
 }
