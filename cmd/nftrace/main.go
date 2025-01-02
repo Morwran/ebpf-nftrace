@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
@@ -53,7 +54,8 @@ func main() {
 			cnt++
 			logger.Debugf(ctx,
 				"cnt: %d, id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
-					"jt: %s, nfproto: %d, policy: %s, makr: %d, iif: %d, iif_type: %d, iif_name: %s, oif: %d, oif_type: %d, oif_name: %s,\n",
+					"jt: %s, nfproto: %d, policy: %s, makr: %d, iif: %d, iif_type: %d, iif_name: %s, oif: %d, oif_type: %d, oif_name: %s, "+
+					"src=%s:%d, dst=%s:%d, proto=%s, mac-src: %s, mac-dst: %s, len=%d\n",
 				cnt,
 				event.Id,
 				TraceType(event.Type),
@@ -74,6 +76,14 @@ func main() {
 				event.Oif,
 				event.OifType,
 				unix.ByteSliceToString(event.OifName[:]),
+				Ip2String(event.Family == unix.NFPROTO_IPV6, event.SrcIp, event.SrcIp6.In6U.U6Addr8[:]),
+				event.SrcPort,
+				Ip2String(event.Family == unix.NFPROTO_IPV6, event.DstIp, event.DstIp6.In6U.U6Addr8[:]),
+				event.DstPort,
+				IpProto(event.IpProto),
+				net.HardwareAddr(event.SrcMac[:]),
+				net.HardwareAddr(event.DstMac[:]),
+				event.Len,
 			)
 		})
 	}()

@@ -149,23 +149,33 @@ struct trace_info
 {
     u32 id;
     enum nft_trace_types type;
-    int family;
     u8 table_name[64];
     u64 table_handle;
     u8 chain_name[64];
     u64 chain_handle;
     u64 rule_handle;
     u8 jump_target[64];
-    u8 nfproto;
     u32 verdict;
+    int family;
+    u8 nfproto;
     u8 policy;
+    u16 len;
     u32 mark;
     u32 iif;
-    u16 iif_type;
-    u8 iif_name[16];
     u32 oif;
+    u16 iif_type;
     u16 oif_type;
+    u8 iif_name[16];
     u8 oif_name[16];
+    u16 src_port;
+    u16 dst_port;
+    u32 src_ip;
+    u32 dst_ip;
+    struct in6_addr src_ip6;
+    struct in6_addr dst_ip6;
+    u8 src_mac[6];
+    u8 dst_mac[6];
+    u8 ip_proto;
 };
 
 const struct trace_info *unused __attribute__((unused));

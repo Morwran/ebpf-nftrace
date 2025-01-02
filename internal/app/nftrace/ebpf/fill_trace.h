@@ -19,6 +19,101 @@ static inline u32 trace_fill_id(struct sk_buff *skb)
     return jhash_2words(hash32_ptr(skb), skb_hash, skb_iif);
 }
 
+static inline int skb_mac_header_was_set(const struct sk_buff *skb)
+{
+    return BPF_CORE_READ(skb, mac_header) != (typeof(BPF_CORE_READ(skb, mac_header)))~0U;
+}
+
+static inline unsigned char *skb_mac_header(const struct sk_buff *skb)
+{
+    return BPF_CORE_READ(skb, head) + BPF_CORE_READ(skb, mac_header);
+}
+
+static inline unsigned char *skb_network_header(const struct sk_buff *skb)
+{
+    return BPF_CORE_READ(skb, head) + BPF_CORE_READ(skb, network_header);
+}
+
+static inline void fill_trace_pkt_info(
+    struct trace_info *trace,
+    const struct sk_buff *skb)
+{
+    void *head = BPF_CORE_READ(skb, head);
+    void *end = head + BPF_CORE_READ(skb, end);
+    if (!head || !end || head >= end)
+        return;
+
+    if (skb_mac_header_was_set(skb))
+    {
+        struct ethhdr *eth = (struct ethhdr *)skb_mac_header(skb);
+        if ((void *)eth + sizeof(*eth) > end)
+            return;
+        bpf_probe_read_kernel(trace->src_mac, sizeof(trace->src_mac), BPF_CORE_READ(eth, h_source));
+        bpf_probe_read_kernel(trace->dst_mac, sizeof(trace->dst_mac), BPF_CORE_READ(eth, h_dest));
+    }
+
+    if (trace->family == NFPROTO_IPV4)
+    {
+        struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
+        if ((void *)iph + sizeof(*iph) > end)
+            return;
+
+        trace->ip_proto = BPF_CORE_READ(iph, protocol);
+        trace->src_ip = bpf_ntohl(BPF_CORE_READ(iph, saddr));
+        trace->dst_ip = bpf_ntohl(BPF_CORE_READ(iph, daddr));
+        trace->len = bpf_ntohs(BPF_CORE_READ(iph, tot_len));
+
+        if (trace->ip_proto == IPPROTO_TCP)
+        {
+            struct tcphdr *tcph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
+            if ((void *)tcph + sizeof(*tcph) > end)
+                return;
+
+            trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
+            trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
+        }
+        else if (trace->ip_proto == IPPROTO_UDP)
+        {
+            struct udphdr *udph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
+            if ((void *)udph + sizeof(*udph) > end)
+                return;
+
+            trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
+            trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
+        }
+    }
+    else if (trace->family == NFPROTO_IPV6)
+    {
+        struct ipv6hdr *ip6h = (struct ipv6hdr *)skb_network_header(skb);
+        if ((void *)ip6h + sizeof(*ip6h) > end)
+            return;
+
+        trace->ip_proto = BPF_CORE_READ(ip6h, nexthdr);
+        trace->src_ip6 = BPF_CORE_READ(ip6h, saddr);
+        trace->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
+        trace->len = bpf_ntohs(BPF_CORE_READ(ip6h, payload_len));
+
+        if (trace->ip_proto == IPPROTO_TCP)
+        {
+            struct tcphdr *tcph = (void *)((void *)ip6h + sizeof(*ip6h));
+            if ((void *)tcph + sizeof(*tcph) > end)
+                return;
+
+            trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
+            trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
+        }
+        else if (trace->ip_proto == IPPROTO_UDP)
+        {
+            struct udphdr *udph = (void *)((void *)ip6h + sizeof(*ip6h));
+            if ((void *)udph + sizeof(*udph) > end)
+                return;
+
+            trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
+            trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
+        }
+    }
+}
+
 static inline void fill_trace(
     struct trace_info *trace,
     const struct nft_pktinfo *pkt,
@@ -49,6 +144,7 @@ static inline void fill_trace(
     trace->oif = BPF_CORE_READ(pkt, state, out, ifindex);
     trace->oif_type = BPF_CORE_READ(pkt, state, out, type);
     bpf_probe_read_kernel_str(trace->oif_name, sizeof(trace->oif_name), BPF_CORE_READ(pkt, state, out, name));
+    fill_trace_pkt_info(trace, BPF_CORE_READ(pkt, skb));
 }
 
 #endif

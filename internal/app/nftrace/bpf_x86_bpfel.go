@@ -15,28 +15,34 @@ import (
 type bpfTraceInfo struct {
 	Id          uint32
 	Type        uint32
-	Family      int32
 	TableName   [64]uint8
-	_           [4]byte
 	TableHandle uint64
 	ChainName   [64]uint8
 	ChainHandle uint64
 	RuleHandle  uint64
 	JumpTarget  [64]uint8
-	Nfproto     uint8
-	_           [3]byte
 	Verdict     uint32
+	Family      int32
+	Nfproto     uint8
 	Policy      uint8
-	_           [3]byte
+	Len         uint16
 	Mark        uint32
 	Iif         uint32
-	IifType     uint16
-	IifName     [16]uint8
-	_           [2]byte
 	Oif         uint32
+	IifType     uint16
 	OifType     uint16
+	IifName     [16]uint8
 	OifName     [16]uint8
-	_           [2]byte
+	SrcPort     uint16
+	DstPort     uint16
+	SrcIp       uint32
+	DstIp       uint32
+	SrcIp6      struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	DstIp6      struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	SrcMac      [6]uint8
+	DstMac      [6]uint8
+	IpProto     uint8
+	_           [3]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
