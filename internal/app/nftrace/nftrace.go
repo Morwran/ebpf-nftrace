@@ -3,10 +3,12 @@
 package nftrace
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,10 +32,22 @@ type (
 	}
 )
 
+var requiredKernelModules = []string{"nf_tables"}
+
 func NewCollector(sampleRate uint64, ringBuffSize int) (*traceCollector, error) {
 	if ringBuffSize < 1 {
 		panic(errors.Errorf("Collector/ringBuffSize is %d, but should be > 1", ringBuffSize))
 	}
+	for _, module := range requiredKernelModules {
+		ok, err := isKernelModuleLoaded(module)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to check module '%s'", module)
+		}
+		if !ok {
+			return nil, errors.Errorf("module %s is not loaded. Please load it with 'modprobe %s'", module, module)
+		}
+	}
+
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, err
 	}
@@ -96,8 +110,13 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 			lostCnt, rcvCnt uint64
 		)
 		defer func() {
-			log.Infof("lost samples: %d (%.2f%%), expected samples: %d",
-				lostCnt, float64(lostCnt)/float64(rcvCnt+lostCnt)*100, rcvCnt+lostCnt)
+			if (rcvCnt + lostCnt) > 0 {
+				log.Infof("lost samples: %d (%.2f%%), expected samples: %d",
+					lostCnt, float64(lostCnt)/float64(rcvCnt+lostCnt)*100, rcvCnt+lostCnt)
+			} else {
+				log.Infof("lost samples: %d, expected samples: %d",
+					lostCnt, rcvCnt+lostCnt)
+			}
 			close(errCh)
 			wg.Done()
 		}()
@@ -165,4 +184,26 @@ func (t *traceCollector) Close() error {
 		t.objs.Close()
 	})
 	return nil
+}
+
+func isKernelModuleLoaded(moduleName string) (bool, error) {
+	file, err := os.Open("/proc/modules")
+	if err != nil {
+		return false, errors.WithMessage(err, "failed to open /proc/modules")
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, moduleName+" ") {
+			return true, nil
+		}
+	}
+
+	if err = scanner.Err(); err != nil {
+		return false, errors.WithMessage(err, "error reading /proc/modules")
+	}
+
+	return false, nil
 }

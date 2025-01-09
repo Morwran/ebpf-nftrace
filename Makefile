@@ -164,8 +164,13 @@ generate:
 	 $(GO) generate ./... && \
 	echo -=OK=-
 
+.PHONY: .clean-ebpf
+.clean-ebpf:
+	rm -rf $(BPFDIR)/ebpf/*.o
+	rm -rf $(BPFDIR)/*.o
 
 .PHONY: clean
-clean: ##clean project
+clean: | .clean-ebpf ##clean project
+clean:
 	rm -rf $(CURDIR)/bin/
 	rm -rf $(CURDIR)/vendor/
