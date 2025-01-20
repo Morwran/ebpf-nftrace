@@ -10,7 +10,9 @@ import (
 	. "github.com/Morwran/ebpf-nftrace/internal/app/nftrace" //nolint:revive
 
 	"github.com/H-BF/corlib/logger"
+	pkgNet "github.com/H-BF/corlib/pkg/net"
 	gs "github.com/H-BF/corlib/pkg/patterns/graceful-shutdown"
+	"github.com/H-BF/corlib/server"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
@@ -25,6 +27,22 @@ func main() {
 		logger.Fatal(ctx, errors.WithMessage(err, "when setup logger"))
 	}
 
+	err := WhenSetupTelemtryServer(ctx, func(srv *server.APIServer) error {
+		ep, e := pkgNet.ParseEndpoint(TelemetryEndpoint)
+		if e != nil {
+			return errors.WithMessagef(e, "parse telemetry endpoint (%s): %v", TelemetryEndpoint, e)
+		}
+		go func() { //start telemetry endpoint
+			if e1 := srv.Run(ctx, ep); e1 != nil {
+				logger.Fatalf(ctx, "telemetry server is failed: %v", e1)
+			}
+		}()
+		return nil
+	})
+	if err != nil {
+		logger.Fatal(ctx, errors.WithMessage(err, "setup telemetry server"))
+	}
+
 	gracefulDuration := 5 * time.Second
 	errc := make(chan error, 1)
 	wg := sync.WaitGroup{}
@@ -34,7 +52,7 @@ func main() {
 			close(errc)
 			wg.Done()
 		}()
-		collector, err := NewCollector(SampleRate, RingBuffSize)
+		collector, err := NewCollector(SampleRate, RingBuffSize, TimeInterval, Mode, EvRate)
 		if err != nil {
 			errc <- err
 			return
@@ -42,20 +60,19 @@ func main() {
 		defer collector.Close()
 
 		cnt := uint64(0)
-
+		i := uint64(0)
 		defer func() {
 			logger.Infof(ctx, "counted traces: %d", cnt)
 		}()
 
 		errc <- collector.Run(ctx, func(event TraceInfo) {
-			if TraceType(event.Type).String() != "rule" {
-				return
-			}
-			cnt++
+			cnt += event.Counter
+			i++
 			logger.Debugf(ctx,
-				"cnt: %d, id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
+				"i: %d, sum: %d, id: %d, type: %s, family: %s, tbl name: %s tbl handle: %d, chain name: %s, chain handle: %d, rule handle: %d, verdict: %s, "+
 					"jt: %s, nfproto: %d, policy: %s, makr: %d, iif: %d, iif_type: %d, iif_name: %s, oif: %d, oif_type: %d, oif_name: %s, "+
-					"src=%s:%d, dst=%s:%d, proto=%s, mac-src: %s, mac-dst: %s, len=%d\n",
+					"src=%s:%d, dst=%s:%d, proto=%s, mac-src: %s, mac-dst: %s, len=%d, counter=%d, ts=%d ns\n",
+				i,
 				cnt,
 				event.Id,
 				TraceType(event.Type),
@@ -84,6 +101,8 @@ func main() {
 				net.HardwareAddr(event.SrcMac[:]),
 				net.HardwareAddr(event.DstMac[:]),
 				event.Len,
+				event.Counter,
+				event.Time,
 			)
 		})
 	}()

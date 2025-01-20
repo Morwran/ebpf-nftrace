@@ -1,6 +1,8 @@
 #ifndef __NFTRACE_H__
 #define __NFTRACE_H__
 
+#include "spinlock.h"
+
 // #define LINUX_VERSION_CODE KERNEL_VERSION(6, 11, 0)
 
 struct nft_rule
@@ -173,6 +175,8 @@ struct trace_info
     u32 dst_ip;
     struct in6_addr src_ip6;
     struct in6_addr dst_ip6;
+    u64 time;
+    u64 counter;
     u8 src_mac[6];
     u8 dst_mac[6];
     u8 ip_proto;

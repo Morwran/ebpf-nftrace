@@ -1,56 +1,15 @@
 #ifndef __HASH_H__
 #define __HASH_H__
 
-/* An arbitrary initial parameter */
-#define JHASH_INITVAL 0xdeadbeef
+#include "jhash.h"
+#include "common.h"
 
-/**
- * rol32 - rotate a 32-bit value left
- * @word: value to rotate
- * @shift: bits to roll
- */
-static inline __u32 rol32(__u32 word, unsigned int shift)
-{
-    return (word << (shift & 31)) | (word >> ((-shift) & 31));
-}
-
-/* __jhash_final - final mixing of 3 32-bit values (a,b,c) into c */
-#define __jhash_final(a, b, c) \
-    {                          \
-        c ^= b;                \
-        c -= rol32(b, 14);     \
-        a ^= c;                \
-        a -= rol32(c, 11);     \
-        b ^= a;                \
-        b -= rol32(a, 25);     \
-        c ^= b;                \
-        c -= rol32(b, 16);     \
-        a ^= c;                \
-        a -= rol32(c, 4);      \
-        b ^= a;                \
-        b -= rol32(a, 14);     \
-        c ^= b;                \
-        c -= rol32(b, 24);     \
-    }
-/* __jhash_nwords - hash exactly 3, 2 or 1 word(s) */
-static inline u32 __jhash_nwords(u32 a, u32 b, u32 c, u32 initval)
-{
-    a += initval;
-    b += initval;
-    c += initval;
-
-    __jhash_final(a, b, c);
-
-    return c;
-}
-
-static inline u32 jhash_2words(u32 a, u32 b, u32 initval)
-{
-    return __jhash_nwords(a, b, 0, initval + JHASH_INITVAL + (2 << 2));
-}
+#define HASH_INIT4_SEED 0xcafe
+#define HASH_INIT6_SEED 0xeb9f
+#define HASH_MAP_HSARD_SEED 0xabcd
 
 /* This really should be called fold32_ptr; it does no hashing to speak of. */
-static inline u32 hash32_ptr(const void *ptr)
+static __always_inline u32 hash32_ptr(const void *ptr)
 {
     unsigned long val = (unsigned long)ptr;
 
@@ -58,6 +17,41 @@ static inline u32 hash32_ptr(const void *ptr)
     val ^= (val >> 32);
 #endif
     return (u32)val;
+}
+
+static __always_inline u32 get_trace_id(struct sk_buff *skb)
+{
+    /* using skb address as ID results in a limited number of
+     * values (and quick reuse).
+     *
+     * So we attempt to use as many skb members that will not
+     * change while skb is with netfilter.
+     */
+    return jhash_2words(hash32_ptr(skb), BPF_CORE_READ(skb, hash), BPF_CORE_READ(skb, skb_iif));
+}
+
+static __always_inline u32 hash_from_tuple_v4(const struct ip4_tuple *tuple)
+{
+    return jhash_3words(tuple->src_ip,
+                        ((u32)tuple->dst_port << 16) | tuple->src_port,
+                        tuple->ip_proto, HASH_INIT4_SEED);
+}
+
+static __always_inline u32 hash_from_tuple_v6(const struct ip6_tuple *tuple)
+{
+    u32 a, b, c;
+
+    a = tuple->src_ip6.in6_u.u6_addr32[0];
+    b = tuple->src_ip6.in6_u.u6_addr32[1];
+    c = tuple->src_ip6.in6_u.u6_addr32[2];
+    __jhash_mix(a, b, c);
+    a += tuple->src_ip6.in6_u.u6_addr32[3];
+    b += ((u32)tuple->dst_port << 16) | tuple->src_port;
+    c += tuple->ip_proto;
+    __jhash_mix(a, b, c);
+    a += HASH_INIT6_SEED;
+    __jhash_final(a, b, c);
+    return c;
 }
 
 #endif

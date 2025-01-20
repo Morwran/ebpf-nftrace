@@ -39,10 +39,13 @@ type bpfTraceInfo struct {
 	DstIp       uint32
 	SrcIp6      struct{ In6U struct{ U6Addr8 [16]uint8 } }
 	DstIp6      struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	Time        uint64
+	Counter     uint64
 	SrcMac      [6]uint8
 	DstMac      [6]uint8
 	IpProto     uint8
-	_           [3]byte
+	Nmap        uint8
+	_           [2]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -87,16 +90,23 @@ type bpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
 	KprobeNftTraceNotify *ebpf.ProgramSpec `ebpf:"kprobe_nft_trace_notify"`
+	SendAgregatedTrace   *ebpf.ProgramSpec `ebpf:"send_agregated_trace"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Events      *ebpf.MapSpec `ebpf:"events"`
-	SampleRate  *ebpf.MapSpec `ebpf:"sample_rate"`
-	TraceCount  *ebpf.MapSpec `ebpf:"trace_count"`
-	TraceHolder *ebpf.MapSpec `ebpf:"trace_holder"`
+	Events        *ebpf.MapSpec `ebpf:"events"`
+	GlobalLock    *ebpf.MapSpec `ebpf:"global_lock"`
+	PerCpuQue     *ebpf.MapSpec `ebpf:"per_cpu_que"`
+	PercpuLock    *ebpf.MapSpec `ebpf:"percpu_lock"`
+	PktCounter    *ebpf.MapSpec `ebpf:"pkt_counter"`
+	RdWaitCounter *ebpf.MapSpec `ebpf:"rd_wait_counter"`
+	SampleRate    *ebpf.MapSpec `ebpf:"sample_rate"`
+	TimeInterval  *ebpf.MapSpec `ebpf:"time_interval"`
+	TracesPerCpu  *ebpf.MapSpec `ebpf:"traces_per_cpu"`
+	WrWaitCounter *ebpf.MapSpec `ebpf:"wr_wait_counter"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -118,18 +128,30 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Events      *ebpf.Map `ebpf:"events"`
-	SampleRate  *ebpf.Map `ebpf:"sample_rate"`
-	TraceCount  *ebpf.Map `ebpf:"trace_count"`
-	TraceHolder *ebpf.Map `ebpf:"trace_holder"`
+	Events        *ebpf.Map `ebpf:"events"`
+	GlobalLock    *ebpf.Map `ebpf:"global_lock"`
+	PerCpuQue     *ebpf.Map `ebpf:"per_cpu_que"`
+	PercpuLock    *ebpf.Map `ebpf:"percpu_lock"`
+	PktCounter    *ebpf.Map `ebpf:"pkt_counter"`
+	RdWaitCounter *ebpf.Map `ebpf:"rd_wait_counter"`
+	SampleRate    *ebpf.Map `ebpf:"sample_rate"`
+	TimeInterval  *ebpf.Map `ebpf:"time_interval"`
+	TracesPerCpu  *ebpf.Map `ebpf:"traces_per_cpu"`
+	WrWaitCounter *ebpf.Map `ebpf:"wr_wait_counter"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.Events,
+		m.GlobalLock,
+		m.PerCpuQue,
+		m.PercpuLock,
+		m.PktCounter,
+		m.RdWaitCounter,
 		m.SampleRate,
-		m.TraceCount,
-		m.TraceHolder,
+		m.TimeInterval,
+		m.TracesPerCpu,
+		m.WrWaitCounter,
 	)
 }
 
@@ -138,11 +160,13 @@ func (m *bpfMaps) Close() error {
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
 	KprobeNftTraceNotify *ebpf.Program `ebpf:"kprobe_nft_trace_notify"`
+	SendAgregatedTrace   *ebpf.Program `ebpf:"send_agregated_trace"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.KprobeNftTraceNotify,
+		p.SendAgregatedTrace,
 	)
 }
 
