@@ -107,6 +107,11 @@ static __always_inline void fill_trace_pkt_info(
     }
 }
 
+static __always_inline enum nft_trace_types get_trace_type(struct nft_traceinfo *info)
+{
+    return BPF_CORE_READ_BITFIELD_PROBED(info, type);
+}
+
 static __always_inline void fill_trace(
     struct trace_info *trace,
     const struct nft_pktinfo *pkt,
@@ -119,7 +124,7 @@ static __always_inline void fill_trace(
     struct nft_traceinfo *info)
 {
     trace->id = BPF_CORE_READ(pkt, skb, hash); // get_trace_id(BPF_CORE_READ(pkt, skb));
-    trace->type = BPF_CORE_READ_BITFIELD_PROBED(info, type);
+    trace->type = get_trace_type(info);
     trace->family = BPF_CORE_READ(info, basechain, type, family);
     bpf_probe_read_kernel_str(trace->table_name, sizeof(trace->table_name), BPF_CORE_READ(info, basechain, chain.table, name));
     trace->table_handle = BPF_CORE_READ(info, basechain, chain.table, handle);

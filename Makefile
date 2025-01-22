@@ -92,12 +92,6 @@ endif
 
 BPFDIR:=$(CURDIR)/internal/app/nftrace
 
-.PHONY: ebpf
-ebpf: | .install-bpf2go ##build ebpf program.
-	@echo build ebpf program && \
-	$(BPF2GO) -output-dir $(BPFDIR) -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(BPFDIR)/ebpf/nftrace.c -- -I$(BPFDIR)/ebpf/ && \
-	echo -=OK=-
-
 
 .PHONY: ebpf-perf
 ebpf-perf: | .install-bpf2go ##build ebpf program.
@@ -105,22 +99,6 @@ ebpf-perf: | .install-bpf2go ##build ebpf program.
 	$(BPF2GO) -output-dir $(BPFDIR) -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(BPFDIR)/ebpf/nftrace_perf.c -- -I$(BPFDIR)/ebpf/ && \
 	echo -=OK=-
 
-
-.PHONY: ebpf-trace-collector
-ebpf-trace-collector: | ebpf ##build ebpf-trace-collector. Usage: make ebpf-trace-collector [platform=linux/<amd64|arm64>]
-ifeq ($(filter amd64 arm64,$(arch)),)
-	$(error arch=$(arch) but must be in [amd64|arm64])
-endif
-ifneq ('$(os)','linux')
-	@$(MAKE) $@ os=linux
-else
-	@$(MAKE) go-deps && \
-	echo build '$(APP)' for OS/ARCH='$(os)'/'$(arch)' ... && \
-	echo into '$(OUT)' && \
-	env GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 \
-	$(GO) build -tags=ringbuf -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
-	echo -=OK=-
-endif
 
 .PHONY: ebpf-trace-collector-perf
 ebpf-trace-collector-perf: | ebpf-perf ##build ebpf-trace-collector. Usage: make ebpf-trace-collector [platform=linux/<amd64|arm64>]
@@ -136,7 +114,7 @@ else
 	echo build '$(APP)' for OS/ARCH='$(os)'/'$(arch)' ... && \
 	echo into '$(OUT)' && \
 	env GOOS=$(os) GOARCH=$(arch) CGO_ENABLED=0 \
-	$(GO) build -tags=perf -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
+	$(GO) build -ldflags="$(LDFLAGS)" -o $(OUT) $(CURDIR)/cmd/$(APP) &&\
 	echo -=OK=-
 endif
 

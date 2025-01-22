@@ -1,6 +1,3 @@
-//go:build perf
-// +build perf
-
 package nftrace
 
 import (

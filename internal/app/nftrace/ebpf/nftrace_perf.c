@@ -19,18 +19,7 @@ const struct trace_info *unused __attribute__((unused));
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-// struct trace_que
-// {
-//     u32 hash;
-//     u32 cpu_id;
-// };
-
-// struct
-// {
-//     __uint(type, BPF_MAP_TYPE_QUEUE);
-//     __uint(max_entries, 1000000);
-//     __type(value, struct trace_que);
-// } trace_hash_que SEC(".maps");
+#define MAX_KEYS 1000
 
 struct
 {
@@ -62,9 +51,7 @@ struct
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
     __uint(max_entries, 128); // number of CPUs
-} events SEC(".maps");
-
-#define MAX_KEYS 1000
+} trace_events SEC(".maps");
 
 SEC("perf_event")
 int send_agregated_trace(struct bpf_perf_event_data *ctx)
@@ -96,7 +83,7 @@ int send_agregated_trace(struct bpf_perf_event_data *ctx)
         {
             continue;
         }
-        bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, value, sizeof(*value));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, value, sizeof(*value));
         bpf_map_delete_elem(&traces_per_cpu, &trace_que_data.hash);
     }
 
@@ -118,7 +105,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
 
     struct trace_info trace = {};
 
-    if (BPF_CORE_READ_BITFIELD_PROBED(info, type) != NFT_TRACETYPE_RULE)
+    if (get_trace_type(info) != NFT_TRACETYPE_RULE)
     {
         return 0;
     }
@@ -147,7 +134,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
 
     if (!is_time_interval_set(bpf_map_lookup_elem(&time_interval, &time_interval_key)))
     {
-        bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
         return 0;
     }
     u32 cpu_id = bpf_get_smp_processor_id();
@@ -164,8 +151,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         if (!active_que)
         {
             bpf_printk("kprobe not found que for cpu=%d", cpu_id);
-            trace.time = bpf_ktime_get_ns();
-            bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
 
             WR_WAIT_COUNT();
             return 0;
@@ -173,8 +159,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         if (bpf_map_update_elem(&traces_per_cpu, &trace.id, &trace, BPF_ANY) != 0)
         {
             bpf_printk("kprobe failed to upd trace for cpu=%d", cpu_id);
-            trace.time = bpf_ktime_get_ns();
-            bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
 
             WR_WAIT_COUNT();
             return 0;
@@ -182,8 +167,7 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         if (bpf_map_push_elem(active_que, &trace, BPF_ANY) != 0)
         {
             bpf_printk("kprobe failed to push trace into que for cpu=%d", cpu_id);
-            trace.time = bpf_ktime_get_ns();
-            bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
 
             WR_WAIT_COUNT();
         }

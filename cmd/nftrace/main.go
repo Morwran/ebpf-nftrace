@@ -27,6 +27,14 @@ func main() {
 		logger.Fatal(ctx, errors.WithMessage(err, "when setup logger"))
 	}
 
+	if err := SetupMetrics(ctx); err != nil {
+		logger.Fatal(ctx, errors.WithMessage(err, "setup metrics"))
+	}
+
+	if metrics := GetAgentMetrics(); metrics != nil {
+		go metrics.MonitorGC()
+	}
+
 	err := WhenSetupTelemtryServer(ctx, func(srv *server.APIServer) error {
 		ep, e := pkgNet.ParseEndpoint(TelemetryEndpoint)
 		if e != nil {
@@ -52,7 +60,7 @@ func main() {
 			close(errc)
 			wg.Done()
 		}()
-		collector, err := NewCollector(SampleRate, RingBuffSize, TimeInterval, Mode, EvRate)
+		collector, err := NewCollector(SampleRate, RingBuffSize, TimeInterval, EvRate)
 		if err != nil {
 			errc <- err
 			return

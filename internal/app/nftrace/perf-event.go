@@ -2,7 +2,6 @@ package nftrace
 
 import (
 	"encoding/binary"
-	"runtime"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -11,31 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// NewPerfEventTimer - assign perf event program as a timer. Rate should be in range 1 ... 10000
-func NewPerfEventTimer(program *ebpf.Program, rate uint64) (*link.RawLink, error) {
-	attr := unix.PerfEventAttr{
-		Type:   unix.PERF_TYPE_SOFTWARE,
-		Config: unix.PERF_COUNT_SW_CPU_CLOCK,
-		Size:   uint32(unsafe.Sizeof(unix.PerfEventAttr{})),
-		Sample: rate,
-		Wakeup: 1,
-		Bits:   unix.PerfBitFreq,
-	}
-	attr.Size = uint32(binary.Size(&attr))
-	fd, err := unix.PerfEventOpen(&attr, -1, 0, -1, unix.PERF_FLAG_FD_CLOEXEC)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create perf event")
-	}
-	defer unix.Close(fd)
-
-	pe, err := link.AttachRawLink(link.RawLinkOptions{Target: fd, Program: program, Attach: ebpf.AttachPerfEvent})
-	err = errors.WithMessage(err, "failed to attach perf event")
-
-	return pe, err
-}
-
-// NewPerfEventTimer - assign perf event program as a timer. Rate should be in range 1 ... 100 (means number of events per second)
-func NewPerfEventTimerForAllCPUs(program *ebpf.Program, rate uint64) (cancel func(), err error) {
+// NewPerfEventTimerPerCPUs - assign perf event program as a timer. Rate should be in range 1 ... 100 (means number of events per second)
+func NewPerfEventTimerPerCPUs(nCPU int, program *ebpf.Program, rate uint64) (cancel func(), err error) {
 	attr := unix.PerfEventAttr{
 		Type:   unix.PERF_TYPE_SOFTWARE,
 		Config: unix.PERF_COUNT_SW_CPU_CLOCK,
@@ -65,7 +41,7 @@ func NewPerfEventTimerForAllCPUs(program *ebpf.Program, rate uint64) (cancel fun
 		}
 	}()
 
-	for cpu := range runtime.NumCPU() {
+	for cpu := range nCPU {
 		var (
 			fd int
 			pe *link.RawLink

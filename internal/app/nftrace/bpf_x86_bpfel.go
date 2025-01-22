@@ -44,8 +44,7 @@ type bpfTraceInfo struct {
 	SrcMac      [6]uint8
 	DstMac      [6]uint8
 	IpProto     uint8
-	Nmap        uint8
-	_           [2]byte
+	_           [3]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -97,7 +96,6 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Events        *ebpf.MapSpec `ebpf:"events"`
 	GlobalLock    *ebpf.MapSpec `ebpf:"global_lock"`
 	PerCpuQue     *ebpf.MapSpec `ebpf:"per_cpu_que"`
 	PercpuLock    *ebpf.MapSpec `ebpf:"percpu_lock"`
@@ -105,6 +103,7 @@ type bpfMapSpecs struct {
 	RdWaitCounter *ebpf.MapSpec `ebpf:"rd_wait_counter"`
 	SampleRate    *ebpf.MapSpec `ebpf:"sample_rate"`
 	TimeInterval  *ebpf.MapSpec `ebpf:"time_interval"`
+	TraceEvents   *ebpf.MapSpec `ebpf:"trace_events"`
 	TracesPerCpu  *ebpf.MapSpec `ebpf:"traces_per_cpu"`
 	WrWaitCounter *ebpf.MapSpec `ebpf:"wr_wait_counter"`
 }
@@ -128,7 +127,6 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Events        *ebpf.Map `ebpf:"events"`
 	GlobalLock    *ebpf.Map `ebpf:"global_lock"`
 	PerCpuQue     *ebpf.Map `ebpf:"per_cpu_que"`
 	PercpuLock    *ebpf.Map `ebpf:"percpu_lock"`
@@ -136,13 +134,13 @@ type bpfMaps struct {
 	RdWaitCounter *ebpf.Map `ebpf:"rd_wait_counter"`
 	SampleRate    *ebpf.Map `ebpf:"sample_rate"`
 	TimeInterval  *ebpf.Map `ebpf:"time_interval"`
+	TraceEvents   *ebpf.Map `ebpf:"trace_events"`
 	TracesPerCpu  *ebpf.Map `ebpf:"traces_per_cpu"`
 	WrWaitCounter *ebpf.Map `ebpf:"wr_wait_counter"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
-		m.Events,
 		m.GlobalLock,
 		m.PerCpuQue,
 		m.PercpuLock,
@@ -150,6 +148,7 @@ func (m *bpfMaps) Close() error {
 		m.RdWaitCounter,
 		m.SampleRate,
 		m.TimeInterval,
+		m.TraceEvents,
 		m.TracesPerCpu,
 		m.WrWaitCounter,
 	)
