@@ -9,15 +9,9 @@
 #define QUE_SIZE 100000UL
 #endif
 
-// static u64 wr_indexes SEC(".bss");
-// static u64 rd_indexes SEC(".bss");
-// static u64 wr_rd_index SEC(".bss");
-
 struct que_data
 {
     u32 hash;
-    // u32 cpu_id;
-    // u32 map_id;
 };
 
 struct

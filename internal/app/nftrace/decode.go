@@ -9,8 +9,8 @@ import (
 
 type (
 	Verdict     int32
-	FamilyTable int32
-	TraceType   uint32
+	FamilyTable uint8
+	TraceType   uint8
 	IpProto     uint8
 )
 

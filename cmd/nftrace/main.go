@@ -69,9 +69,6 @@ func main() {
 
 		cnt := uint64(0)
 		i := uint64(0)
-		defer func() {
-			logger.Infof(ctx, "counted traces: %d", cnt)
-		}()
 
 		errc <- collector.Run(ctx, func(event TraceInfo) {
 			cnt += event.Counter

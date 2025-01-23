@@ -132,14 +132,17 @@ func (t *traceCollector) Run(ctx context.Context, callback func(event TraceInfo)
 
 	defer func() {
 		var (
-			key                             = uint32(0)
-			pktCntVal, wrWaitVal, rdWaitVal = uint64(0), uint64(0), uint64(0)
+			key                                                     = uint32(0)
+			pktCntVal, wrWaitVal, rdWaitVal, wrTraceVal, rdTraceVal = uint64(0), uint64(0), uint64(0), uint64(0), uint64(0)
 		)
 
 		t.objs.PktCounter.Lookup(&key, &pktCntVal)
 		t.objs.WrWaitCounter.Lookup(&key, &wrWaitVal)
 		t.objs.RdWaitCounter.Lookup(&key, &rdWaitVal)
-		log.Infof("rcv pkt count: %d, wr waiting: %d, rd waiting: %d", pktCntVal, wrWaitVal, rdWaitVal)
+		t.objs.WrTraceCounter.Lookup(&key, &wrTraceVal)
+		t.objs.RdTraceCounter.Lookup(&key, &rdTraceVal)
+		log.Infof("rcv pkt count: %d, wr waiting: %d, rd waiting: %d, wr traces: %d, rd traces: %d",
+			pktCntVal, wrWaitVal, rdWaitVal, wrTraceVal, rdTraceVal)
 	}()
 
 	if t.timeInterval > 0 {
@@ -193,9 +196,9 @@ func (t *traceCollector) pushTraces(ctx context.Context, callback func(event Tra
 			if (rcvCnt + lostCnt) > 0 {
 				rateLost = float64(lostCnt) / float64(rcvCnt+lostCnt) * 100
 			}
-			// trace size is 136/360 bytes
+			// trace size is 120 bytes
 			log.Infof("lost samples: %d (%.2f%%), expected samples: %d, agregated pkt: %d, traces size: %d",
-				lostCnt, rateLost, rcvCnt+lostCnt, pktCnt, 136*rcvCnt)
+				lostCnt, rateLost, rcvCnt+lostCnt, pktCnt, 120*rcvCnt)
 			close(errCh)
 			wg.Done()
 		}()
@@ -271,13 +274,13 @@ func newPerCpuQueMap(mapName string, nCPU int) (*ebpf.Map, error) {
 	}
 
 	for i := 0; i < nCPU; i++ {
-		innerMapSpec := outerMapSpec.InnerMap.Copy()
-		innerMap, err := ebpf.NewMap(innerMapSpec)
+		innerMap, err := ebpf.NewMap(outerMapSpec.InnerMap)
 		if err != nil {
 			return nil, errors.WithMessage(err, "inner_map")
 		}
 		defer innerMap.Close()
-		outerMapSpec.Contents[i] = ebpf.MapKV{Key: uint32(i), Value: innerMap}
+		k := uint32(i)
+		outerMapSpec.Contents[i] = ebpf.MapKV{Key: k, Value: innerMap}
 	}
 	return ebpf.NewMap(&outerMapSpec)
 }

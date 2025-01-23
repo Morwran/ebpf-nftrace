@@ -43,6 +43,7 @@ struct
     __uint(max_entries, 200000);
     __type(key, u32);
     __type(value, struct trace_info);
+    //__uint(map_flags, BPF_F_NO_PREALLOC);
 } traces_per_cpu SEC(".maps");
 
 struct
@@ -61,6 +62,7 @@ int send_agregated_trace(struct bpf_perf_event_data *ctx)
 
     int i = 0;
     u32 cpu_id = bpf_get_smp_processor_id();
+
     void *active_que = bpf_map_lookup_elem(&per_cpu_que, &cpu_id);
     if (!active_que)
     {
@@ -69,7 +71,6 @@ int send_agregated_trace(struct bpf_perf_event_data *ctx)
         RD_WAIT_COUNT();
         return 0;
     }
-    // bpf_printk("perf_event cpu=%d, period=%d", cpu_id, ctx->sample_period);
 
 #pragma unroll
     for (; i < MAX_KEYS; i++)
@@ -78,11 +79,14 @@ int send_agregated_trace(struct bpf_perf_event_data *ctx)
         {
             break;
         }
+
         value = bpf_map_lookup_elem(&traces_per_cpu, &trace_que_data.hash);
         if (!value)
         {
+            bpf_printk("perf_event not found trace for cpu=%d and hash=%x", cpu_id, trace_que_data.hash);
             continue;
         }
+        RD_TRACE_ADD_COUNT(value->counter);
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, value, sizeof(*value));
         bpf_map_delete_elem(&traces_per_cpu, &trace_que_data.hash);
     }
@@ -138,12 +142,13 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         return 0;
     }
     u32 cpu_id = bpf_get_smp_processor_id();
+    u32 per_cpu_trace_hash = jhash_1word(trace.trace_hash, cpu_id);
 
-    struct trace_info *old_trace = (struct trace_info *)bpf_map_lookup_elem(&traces_per_cpu, &trace.id);
+    struct trace_info *old_trace = (struct trace_info *)bpf_map_lookup_elem(&traces_per_cpu, &per_cpu_trace_hash);
     if (!old_trace)
     {
         struct que_data trace_que_data = {
-            .hash = trace.id,
+            .hash = per_cpu_trace_hash,
         };
         trace.time = bpf_ktime_get_ns();
 
@@ -152,28 +157,30 @@ int BPF_KPROBE(kprobe_nft_trace_notify, const struct nft_pktinfo *pkt,
         {
             bpf_printk("kprobe not found que for cpu=%d", cpu_id);
             bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
-
+            WR_TRACE_ADD_COUNT(1);
             WR_WAIT_COUNT();
             return 0;
         }
-        if (bpf_map_update_elem(&traces_per_cpu, &trace.id, &trace, BPF_ANY) != 0)
+        if (bpf_map_update_elem(&traces_per_cpu, &per_cpu_trace_hash, &trace, BPF_NOEXIST) != 0)
         {
             bpf_printk("kprobe failed to upd trace for cpu=%d", cpu_id);
             bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
-
+            WR_TRACE_ADD_COUNT(1);
             WR_WAIT_COUNT();
             return 0;
         }
-        if (bpf_map_push_elem(active_que, &trace, BPF_ANY) != 0)
+        if (bpf_map_push_elem(active_que, &trace_que_data, BPF_ANY) != 0)
         {
             bpf_printk("kprobe failed to push trace into que for cpu=%d", cpu_id);
             bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &trace, sizeof(trace));
-
+            WR_TRACE_ADD_COUNT(1);
             WR_WAIT_COUNT();
+            return 0;
         }
-
+        WR_TRACE_ADD_COUNT(1);
         return 0;
     }
+    WR_TRACE_ADD_COUNT(1);
     __sync_fetch_and_add(&old_trace->counter, 1);
 
     return 0;

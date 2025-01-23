@@ -1,8 +1,8 @@
 #ifndef __DOUBLE_BUFFERING_H__
 #define __DOUBLE_BUFFERING_H__
 
-#include "vmlinux.h"
-#include <bpf/bpf_helpers.h>
+// #include "vmlinux.h"
+// #include <bpf/bpf_helpers.h>
 
 // struct
 // {
@@ -14,7 +14,7 @@
 
 // struct
 // {
-//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 //     __uint(max_entries, 100000);
 //     __type(key, u32);
 //     __type(value, struct trace_info);
@@ -22,7 +22,7 @@
 
 // struct
 // {
-//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 //     __uint(max_entries, 100000);
 //     __type(key, u32);
 //     __type(value, struct trace_info);

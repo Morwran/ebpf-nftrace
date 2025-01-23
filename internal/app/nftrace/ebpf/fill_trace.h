@@ -66,14 +66,6 @@ static __always_inline void fill_trace_pkt_info(
             trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
             trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
         }
-        const struct ip4_tuple tuple = {
-            .src_port = trace->src_port,
-            .dst_port = trace->dst_port,
-            .src_ip = trace->src_ip,
-            .dst_ip = trace->dst_ip,
-            .ip_proto = trace->family,
-        };
-        // bpf_printk("tuple_hash: %x, trace_id: %x, skb_hash: %x", hash_from_tuple_v4(&tuple), get_trace_id(skb), BPF_CORE_READ(skb, hash));
     }
     else if (trace->family == NFPROTO_IPV6)
     {
@@ -123,7 +115,8 @@ static __always_inline void fill_trace(
 #endif
     struct nft_traceinfo *info)
 {
-    trace->id = BPF_CORE_READ(pkt, skb, hash); // get_trace_id(BPF_CORE_READ(pkt, skb));
+    struct sk_buff *skb = (struct sk_buff *)BPF_CORE_READ(pkt, skb);
+    trace->id = get_trace_id(skb);
     trace->type = get_trace_type(info);
     trace->family = BPF_CORE_READ(info, basechain, type, family);
     bpf_probe_read_kernel_str(trace->table_name, sizeof(trace->table_name), BPF_CORE_READ(info, basechain, chain.table, name));
@@ -142,7 +135,8 @@ static __always_inline void fill_trace(
     trace->oif = BPF_CORE_READ(pkt, state, out, ifindex);
     trace->oif_type = BPF_CORE_READ(pkt, state, out, type);
     bpf_probe_read_kernel_str(trace->oif_name, sizeof(trace->oif_name), BPF_CORE_READ(pkt, state, out, name));
-    fill_trace_pkt_info(trace, BPF_CORE_READ(pkt, skb));
+    fill_trace_pkt_info(trace, skb);
+    trace->trace_hash = get_trace_hash(trace, skb);
     __sync_fetch_and_add(&trace->counter, 1);
 }
 

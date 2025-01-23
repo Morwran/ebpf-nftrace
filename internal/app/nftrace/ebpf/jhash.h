@@ -66,10 +66,9 @@ static __always_inline u32 __jhash_nwords(u32 a, u32 b, u32 c, u32 initval)
     return c;
 }
 
-static __always_inline u32 jhash_3words(u32 a, u32 b, __u32 c,
-                                        u32 initval)
+static __always_inline u32 jhash_1word(u32 a, u32 initval)
 {
-    return __jhash_nwords(a, b, c, initval + JHASH_INITVAL + (3 << 2));
+    return __jhash_nwords(a, 0, 0, initval + JHASH_INITVAL + (1 << 2));
 }
 
 static __always_inline u32 jhash_2words(u32 a, u32 b, u32 initval)
@@ -77,9 +76,15 @@ static __always_inline u32 jhash_2words(u32 a, u32 b, u32 initval)
     return __jhash_nwords(a, b, 0, initval + JHASH_INITVAL + (2 << 2));
 }
 
-static __always_inline u32 jhash_1word(u32 a, u32 initval)
+static __always_inline u32 jhash_3words(u32 a, u32 b, __u32 c,
+                                        u32 initval)
 {
-    return __jhash_nwords(a, 0, 0, initval + JHASH_INITVAL + (1 << 2));
+    return __jhash_nwords(a, b, c, initval + JHASH_INITVAL + (3 << 2));
+}
+
+static __always_inline u32 jhash_4words(u32 w0, u32 w1, u32 w2, u32 w3, u32 initval)
+{
+    return jhash_1word(w3, jhash_3words(w0, w1, w2, initval));
 }
 
 #endif

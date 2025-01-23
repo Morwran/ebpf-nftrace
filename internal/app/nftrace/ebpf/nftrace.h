@@ -150,18 +150,20 @@ struct nft_traceinfo
 struct trace_info
 {
     u32 id;
-    enum nft_trace_types type;
+    u32 trace_hash;
     u8 table_name[64];
     u64 table_handle;
     u8 chain_name[64];
     u64 chain_handle;
     u64 rule_handle;
     u8 jump_target[64];
+    u64 time;
+    u64 counter;
     u32 verdict;
-    int family;
+    u8 type;
+    u8 family;
     u8 nfproto;
     u8 policy;
-    u16 len;
     u32 mark;
     u32 iif;
     u32 oif;
@@ -175,11 +177,10 @@ struct trace_info
     u32 dst_ip;
     struct in6_addr src_ip6;
     struct in6_addr dst_ip6;
-    u64 time;
-    u64 counter;
+    u16 len;
     u8 src_mac[6];
     u8 dst_mac[6];
-    u8 ip_proto;
+    u8 ip_proto; // 120 bytes
 };
 
 const struct trace_info *unused __attribute__((unused));
