@@ -39,7 +39,7 @@ struct
 
 struct
 {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 200000);
     __type(key, u32);
     __type(value, struct trace_info);

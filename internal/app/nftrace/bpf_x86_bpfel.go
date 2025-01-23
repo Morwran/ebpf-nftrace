@@ -98,7 +98,6 @@ type bpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
 	GlobalLock     *ebpf.MapSpec `ebpf:"global_lock"`
-	HashInitVal    *ebpf.MapSpec `ebpf:"hash_init_val"`
 	PerCpuQue      *ebpf.MapSpec `ebpf:"per_cpu_que"`
 	PercpuLock     *ebpf.MapSpec `ebpf:"percpu_lock"`
 	PktCounter     *ebpf.MapSpec `ebpf:"pkt_counter"`
@@ -132,7 +131,6 @@ func (o *bpfObjects) Close() error {
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
 	GlobalLock     *ebpf.Map `ebpf:"global_lock"`
-	HashInitVal    *ebpf.Map `ebpf:"hash_init_val"`
 	PerCpuQue      *ebpf.Map `ebpf:"per_cpu_que"`
 	PercpuLock     *ebpf.Map `ebpf:"percpu_lock"`
 	PktCounter     *ebpf.Map `ebpf:"pkt_counter"`
@@ -149,7 +147,6 @@ type bpfMaps struct {
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.GlobalLock,
-		m.HashInitVal,
 		m.PerCpuQue,
 		m.PercpuLock,
 		m.PktCounter,
