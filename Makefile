@@ -12,7 +12,7 @@ GO_VERSION:=$(shell go version | sed -E 's/.* go(.*) .*/\1/g')
 BUILD_TS:=$(shell date +%FT%T%z)
 VERSION:=$(shell cat ./VERSION 2> /dev/null | sed -n "1p")
 
-PROJECT:=NAG
+PROJECT:=EBPF
 APP?=nftrace
 APP_NAME?=$(PROJECT)/$(APP)
 APP_VERSION:=$(if $(VERSION),$(VERSION),$(if $(GIT_TAG),$(GIT_TAG),$(GIT_BRANCH)))
@@ -86,24 +86,32 @@ ifneq ($(wildcard $(BPF2GO)),)
 	@echo >/dev/null
 else
 	@echo installing bpf2go && \
-	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go && \
+	GOBIN=$(GOBIN) $(GO) install github.com/cilium/ebpf/cmd/bpf2go@v0.16.0 && \
 	echo -=OK=-
 endif
 
-BPFDIR:=$(CURDIR)/internal/app/nftrace
+BPFDIR:=$(CURDIR)/internal/nftrace
 
 
-.PHONY: ebpf-perf
-ebpf-perf: | .install-bpf2go ##build ebpf program.
-	@echo build ebpf program && \
-	$(BPF2GO) -output-dir $(BPFDIR) -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(BPFDIR)/ebpf/nftrace_perf.c -- -I$(BPFDIR)/ebpf/ && \
+.PHONY: .ebpf
+.ebpf: | .install-bpf2go ##build ebpf program. Usage: make .ebpf [arch=<amd64|arm64>]
+ifeq ($(filter amd64 arm64,$(arch)),)
+	$(error arch=$(arch) but must be in [amd64|arm64])
+endif
+ifneq ('$(os)','linux')
+	@$(MAKE) $@ os=linux
+else
+	@echo build ebpf program for OS/ARCH='$(os)'/'$(arch)' ... && \
+	$(BPF2GO) -output-dir $(BPFDIR) -tags $(os) -type trace_info -go-package=nftrace -target $(arch) bpf $(BPFDIR)/ebpf/nftrace.c -- -I$(BPFDIR)/ebpf/ && \
 	echo -=OK=-
+endif
 
 
-.PHONY: ebpf-trace-collector-perf
-ebpf-trace-collector-perf: | ebpf-perf ##build ebpf-trace-collector. Usage: make ebpf-trace-collector [platform=linux/<amd64|arm64>]
-ebpf-trace-collector-perf: OUT=$(CURDIR)/bin/ebpf-trace-collector-perf
-ebpf-trace-collector-perf:
+.PHONY: nftrace
+
+nftrace: | .ebpf ##build nftrace. Usage: make nftrace [platform=linux/<amd64|arm64>]
+nftrace: OUT=$(CURDIR)/bin/nftrace
+nftrace:
 ifeq ($(filter amd64 arm64,$(arch)),)
 	$(error arch=$(arch) but must be in [amd64|arm64])
 endif
@@ -120,20 +128,22 @@ endif
 
 
 MOCKERY_REPO:=https://github.com/vektra/mockery
-MOCKERY_LATEST_VERSION:= $(shell git ls-remote --tags --refs --sort='v:refname' $(MOCKERY_REPO)|egrep -o "v[0-9]+.*"|grep -v "alpha"|tail -1)
+MOCKERY_LATEST_VERSION:=v2.43.0
 MOCKERY:=$(GOBIN)/mockery
+
 ifneq ($(wildcard $(MOCKERY)),)
-	MOCKERY_CUR_VERSION?=$(shell $(MOCKERY) --version|egrep -o "v[0-9]+.*")
+	MOCKERY_CUR_VERSION?=$(shell ./bin/mockery --version 2>&1 | grep -Eo "v[0-9]+\.[0-9]+\.[0-9]+" | head -n 1)
 else
 	MOCKERY_CUR_VERSION?=
 endif
+
 .PHONY: .install-mockery
 .install-mockery:
 ifeq ($(filter $(MOCKERY_CUR_VERSION), $(MOCKERY_LATEST_VERSION)),)
-	@echo installing \'mockery\' $(MOCKERY_LATEST_VERSION) util... && \
+	@echo installing 'mockery' $(MOCKERY_LATEST_VERSION) util... && \
 	GOBIN=$(GOBIN) $(GO) install github.com/vektra/mockery/v2@$(MOCKERY_LATEST_VERSION)
 else
-	@echo >/dev/null
+	@echo 'mockery is up to date: $(MOCKERY_CUR_VERSION)'
 endif
 
 .PHONY:

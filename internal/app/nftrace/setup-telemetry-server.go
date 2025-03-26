@@ -17,7 +17,6 @@ func WhenSetupTelemtryServer(ctx context.Context, f func(*server.APIServer) erro
 		err  error
 	)
 	app.WhenHaveMetricsRegistry(func(reg *prometheus.Registry) {
-		//подключаем prometheus метрики
 		promHandler := promhttp.InstrumentMetricHandler(
 			reg,
 			promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
