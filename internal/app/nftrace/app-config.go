@@ -13,6 +13,7 @@ var (
 	CollectorType     string
 	UseAggregation    bool
 	JsonFormat        bool
+	NoPrintTrace      bool
 )
 
 func init() {
@@ -24,5 +25,6 @@ func init() {
 	flag.StringVar(&CollectorType, "c", "ebpf", "type of collector: ebpf|netlink")
 	flag.BoolVar(&UseAggregation, "a", false, "use aggregation")
 	flag.BoolVar(&JsonFormat, "j", false, "print in json format")
+	flag.BoolVar(&NoPrintTrace, "np", false, "don't print trace (e.g. for debugging reasons)")
 	flag.Parse()
 }

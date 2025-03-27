@@ -34,6 +34,7 @@ type (
 		log        logger.TypeOfLogger
 		jsonFormat bool
 	}
+	dummyPrinter struct{}
 )
 
 func NewTracePrinter(options ...Option) TracePrinter {
@@ -52,6 +53,13 @@ func (p printerImpl) Print(traces ...model.Trace) {
 		print = p.log.Infof
 	}
 	PrintTrace(traces, p.jsonFormat, false, print, nil)
+}
+
+func NewDummyPrinter() TracePrinter {
+	return &dummyPrinter{}
+}
+
+func (p dummyPrinter) Print(traces ...model.Trace) {
 }
 
 func PrintTrace(traces []model.Trace, jsonFormat, printTimestamp bool, print PrinterF, callback func(trace model.Trace)) {

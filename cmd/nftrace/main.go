@@ -172,15 +172,20 @@ func (m *mainJob) init(ctx context.Context) (err error) {
 		return err
 	}
 
-	var opts []printer.Option
+	tracePrinter := printer.NewDummyPrinter()
 
-	if JsonFormat {
-		opts = append(opts, printer.WithJsonFormat())
+	if !NoPrintTrace {
+		var opts []printer.Option
+
+		if JsonFormat {
+			opts = append(opts, printer.WithJsonFormat())
+		}
+		tracePrinter = printer.NewTracePrinter(opts...)
 	}
 
 	m.printer = nftrace.NewTracePrinter(nftrace.PrinterDeps{
 		TraceProvider: m.trCollect,
-		Printer:       printer.NewTracePrinter(opts...),
+		Printer:       tracePrinter,
 	})
 
 	return nil
