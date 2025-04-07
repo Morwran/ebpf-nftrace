@@ -304,7 +304,8 @@ struct trace_info
     u16 len;
     u8 src_mac[6];
     u8 dst_mac[6];
-    u8 ip_proto; // 120 bytes
+    u8 ip_proto;
+    u8 ip_version;
 };
 
 const struct trace_info *unused __attribute__((unused));

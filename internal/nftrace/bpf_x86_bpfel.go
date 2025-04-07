@@ -45,7 +45,8 @@ type bpfTraceInfo struct {
 	SrcMac      [6]uint8
 	DstMac      [6]uint8
 	IpProto     uint8
-	_           [5]byte
+	IpVersion   uint8
+	_           [4]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.

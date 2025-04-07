@@ -35,6 +35,62 @@ static __always_inline unsigned char *skb_network_header(const struct sk_buff *s
     return BPF_CORE_READ(skb, head) + BPF_CORE_READ(skb, network_header);
 }
 
+static __always_inline void fill_ipv4_info(struct trace_info *trace, struct iphdr *iph, void *end)
+{
+    trace->ip_proto = BPF_CORE_READ(iph, protocol);
+    trace->src_ip = bpf_ntohl(BPF_CORE_READ(iph, saddr));
+    trace->dst_ip = bpf_ntohl(BPF_CORE_READ(iph, daddr));
+    trace->len = bpf_ntohs(BPF_CORE_READ(iph, tot_len));
+    trace->ip_version = BPF_CORE_READ_BITFIELD_PROBED(iph, version);
+
+    if (trace->ip_proto == IPPROTO_TCP)
+    {
+        struct tcphdr *tcph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
+        if ((void *)tcph + sizeof(*tcph) > end)
+            return;
+
+        trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
+        trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
+    }
+    else if (trace->ip_proto == IPPROTO_UDP)
+    {
+        struct udphdr *udph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
+        if ((void *)udph + sizeof(*udph) > end)
+            return;
+
+        trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
+        trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
+    }
+}
+
+static __always_inline void fill_ipv6_info(struct trace_info *trace, struct ipv6hdr *ip6h, void *end)
+{
+    trace->ip_proto = BPF_CORE_READ(ip6h, nexthdr);
+    trace->src_ip6 = BPF_CORE_READ(ip6h, saddr);
+    trace->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
+    trace->len = bpf_ntohs(BPF_CORE_READ(ip6h, payload_len));
+    trace->ip_version = BPF_CORE_READ_BITFIELD_PROBED(ip6h, version);
+
+    if (trace->ip_proto == IPPROTO_TCP)
+    {
+        struct tcphdr *tcph = (void *)((void *)ip6h + sizeof(*ip6h));
+        if ((void *)tcph + sizeof(*tcph) > end)
+            return;
+
+        trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
+        trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
+    }
+    else if (trace->ip_proto == IPPROTO_UDP)
+    {
+        struct udphdr *udph = (void *)((void *)ip6h + sizeof(*ip6h));
+        if ((void *)udph + sizeof(*udph) > end)
+            return;
+
+        trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
+        trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
+    }
+}
+
 static __always_inline void fill_trace_pkt_info(
     struct trace_info *trace,
     const struct sk_buff *skb)
@@ -58,59 +114,31 @@ static __always_inline void fill_trace_pkt_info(
         struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
         if ((void *)iph + sizeof(*iph) > end)
             return;
-
-        trace->ip_proto = BPF_CORE_READ(iph, protocol);
-        trace->src_ip = bpf_ntohl(BPF_CORE_READ(iph, saddr));
-        trace->dst_ip = bpf_ntohl(BPF_CORE_READ(iph, daddr));
-        trace->len = bpf_ntohs(BPF_CORE_READ(iph, tot_len));
-
-        if (trace->ip_proto == IPPROTO_TCP)
-        {
-            struct tcphdr *tcph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
-            if ((void *)tcph + sizeof(*tcph) > end)
-                return;
-
-            trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
-            trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
-        }
-        else if (trace->ip_proto == IPPROTO_UDP)
-        {
-            struct udphdr *udph = (void *)((void *)iph + (BPF_CORE_READ_BITFIELD_PROBED(iph, ihl) * 4));
-            if ((void *)udph + sizeof(*udph) > end)
-                return;
-
-            trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
-            trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
-        }
+        fill_ipv4_info(trace, iph, end);
     }
     else if (trace->family == NFPROTO_IPV6)
     {
         struct ipv6hdr *ip6h = (struct ipv6hdr *)skb_network_header(skb);
         if ((void *)ip6h + sizeof(*ip6h) > end)
             return;
-
-        trace->ip_proto = BPF_CORE_READ(ip6h, nexthdr);
-        trace->src_ip6 = BPF_CORE_READ(ip6h, saddr);
-        trace->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
-        trace->len = bpf_ntohs(BPF_CORE_READ(ip6h, payload_len));
-
-        if (trace->ip_proto == IPPROTO_TCP)
+        fill_ipv6_info(trace, ip6h, end);
+    }
+    else if (trace->family == NFPROTO_INET)
+    {
+        struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
+        if ((void *)iph + sizeof(*iph) > end)
+            return;
+        u8 ip_version = BPF_CORE_READ_BITFIELD_PROBED(iph, version);
+        if (ip_version == 4)
         {
-            struct tcphdr *tcph = (void *)((void *)ip6h + sizeof(*ip6h));
-            if ((void *)tcph + sizeof(*tcph) > end)
-                return;
-
-            trace->src_port = bpf_ntohs(BPF_CORE_READ(tcph, source));
-            trace->dst_port = bpf_ntohs(BPF_CORE_READ(tcph, dest));
+            fill_ipv4_info(trace, iph, end);
         }
-        else if (trace->ip_proto == IPPROTO_UDP)
+        else if (ip_version == 6)
         {
-            struct udphdr *udph = (void *)((void *)ip6h + sizeof(*ip6h));
-            if ((void *)udph + sizeof(*udph) > end)
+            struct ipv6hdr *ip6h = (struct ipv6hdr *)skb_network_header(skb);
+            if ((void *)ip6h + sizeof(*ip6h) > end)
                 return;
-
-            trace->src_port = bpf_ntohs(BPF_CORE_READ(udph, source));
-            trace->dst_port = bpf_ntohs(BPF_CORE_READ(udph, dest));
+            fill_ipv6_info(trace, ip6h, end);
         }
     }
 }

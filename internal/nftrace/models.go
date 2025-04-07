@@ -12,6 +12,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	IPVersion4 = 4
+	IPVersion6 = 6
+)
+
 type (
 	EbpfTrace bpfTraceInfo
 
@@ -93,8 +98,8 @@ func (t *EbpfTrace) ToNftTrace() NftTrace {
 		Oifname:    FastBytes2String(bytes.TrimRight(t.OifName[:], "\x00")),
 		SMacAddr:   FastHardwareAddr(t.SrcMac[:]).String(),
 		DMacAddr:   FastHardwareAddr(t.DstMac[:]).String(),
-		SAddr:      Ip2String(t.Family == unix.NFPROTO_IPV6, t.SrcIp, t.SrcIp6.In6U.U6Addr8[:]),
-		DAddr:      Ip2String(t.Family == unix.NFPROTO_IPV6, t.DstIp, t.DstIp6.In6U.U6Addr8[:]),
+		SAddr:      Ip2String(t.IpVersion == IPVersion6, t.SrcIp, t.SrcIp6.In6U.U6Addr8[:]),
+		DAddr:      Ip2String(t.IpVersion == IPVersion6, t.DstIp, t.DstIp6.In6U.U6Addr8[:]),
 		SPort:      uint32(t.SrcPort),
 		DPort:      uint32(t.DstPort),
 		Length:     uint32(t.Len),
@@ -121,7 +126,7 @@ func (tr *NetlinkTrace) InitFromMsg(msg netlink.Message) error {
 		case unix.NFTA_TRACE_CHAIN:
 			tr.Chain = ad.String()
 		case unix.NFTA_TRACE_VERDICT:
-			ad, err := netlink.NewAttributeDecoder(ad.Bytes())
+			ad, err := netlink.NewAttributeDecoder(ad.Bytes()) //nolint:govet
 			if err != nil {
 				return err
 			}
